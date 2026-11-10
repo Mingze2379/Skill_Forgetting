@@ -39,7 +39,10 @@ def scripts(config: dict, config_path: Path, repo: Path, run_root: Path) -> dict
     return {'baseline': baseline, 'branches': branch, 'report': report}
 
 
-def submit(config_path: Path, repo: Path, run_root: Path | None = None, dry_run=False) -> dict:
+def submit(config_path: Path, repo: Path, run_root: Path | None = None, dry_run=False,
+           dependency_job: str | None = None) -> dict:
+    if dependency_job is not None and not dependency_job.isdigit():
+        raise ValueError('The prerequisite SLURM job ID must be numeric')
     config = load_config(config_path)
     run_root = (run_root or Path(config['run_root'])).resolve()
     manifest = json.loads((run_root / 'manifest.json').read_text())
@@ -55,6 +58,7 @@ def submit(config_path: Path, repo: Path, run_root: Path | None = None, dry_run=
         target.write_text(script); target.chmod(0o700)
     plan = {'subsets': list(SUBSETS), 'config': config,
             'dependency': 'baseline afterok -> branches array afterok -> report',
+            'prerequisite_job': dependency_job,
             'gpu_per_job': 1, 'maximum_concurrent_gpus': config['branch_concurrency']}
     write_json(directory / 'plan.json', plan)
     if dry_run:
@@ -68,6 +72,8 @@ def submit(config_path: Path, repo: Path, run_root: Path | None = None, dry_run=
         command = ['sbatch', '--parsable']
         if parent:
             command += ['--dependency=afterok:' + ids[parent]]
+        elif dependency_job:
+            command += ['--dependency=afterok:' + dependency_job]
         command.append(str(directory / f'{name}.sbatch'))
         result = subprocess.run(command, check=True, capture_output=True, text=True)
         ids[name] = result.stdout.strip().split(';')[0]
@@ -85,8 +91,9 @@ def main():
     p.add_argument('--repo', type=Path, default=Path.cwd())
     p.add_argument('--run_root', type=Path)
     p.add_argument('--dry_run', action='store_true')
+    p.add_argument('--dependency_job', help='Start the baseline only after this smoke-test job succeeds')
     args = p.parse_args()
-    submit(args.config, args.repo, args.run_root, args.dry_run)
+    submit(args.config, args.repo, args.run_root, args.dry_run, args.dependency_job)
 
 
 if __name__ == '__main__':

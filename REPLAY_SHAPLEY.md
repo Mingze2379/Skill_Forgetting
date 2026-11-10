@@ -62,6 +62,10 @@ PY=/data/user/msun411/cl-artifacts/envs/sft/bin/python
 # 确认模型和依赖就绪后提交。已经提交的目录会拒绝重复提交。
 "$PY" -m skill_forgetting.experiments.slurm \
   --config configs/replay_shapley_pilot.json
+
+# 小测试正在排队时，可以预先提交依赖链；只有小测试成功才会运行。
+"$PY" -m skill_forgetting.experiments.slurm \
+  --config configs/replay_shapley_pilot.json --dependency_job SMOKE_JOB_ID
 ```
 
 调度使用 `acd_u`：顺序基线一个 GPU，成功后启动八个单 GPU 分支，最多同时八张 GPU、64 核 CPU；最后一个 CPU 作业读取完成的分数表。依赖使用 `afterok`；失败的训练不会触发后续实验。作业 ID 保存在 `runs/replay_shapley_pilot/slurm/jobs.json`，日志也在此目录。

@@ -6,12 +6,15 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+import sys
 
 from skill_forgetting.experiments.common import DOMAINS, SUBSETS, digest, read_rows, write_json, write_rows
 from skill_forgetting.experiments.prepare import prepare, problem_id
 from skill_forgetting.experiments.report import shapley, analyze, collect
 from skill_forgetting.experiments.scoring import judge, score
-from skill_forgetting.experiments.slurm import scripts
+from skill_forgetting.experiments.slurm import scripts, submit
 from skill_forgetting.math.plain import sft_example
 from skill_forgetting.math.evaluate import build_prompt
 from skill_forgetting.training.single_sft import SFTSpec
@@ -141,6 +144,26 @@ class ReplayTests(unittest.TestCase):
         self.assertIn('--array=0-7%8', rendered['branches'])
         self.assertNotIn('--gres', rendered['report'])
         self.assertIn('HF_HUB_OFFLINE=1', rendered['baseline'])
+
+    def test_smoke_success_gates_the_entire_job_chain(self):
+        config = copy.deepcopy(self.config)
+        config.update(train_python=sys.executable, eval_python=sys.executable,
+                      model=str(self.root/'model'))
+        write_json(self.root/'model/config.json', {})
+        write_json(self.root/'config.json', config)
+        manifest = copy.deepcopy(self.manifest)
+        manifest['config'] = config
+        write_json(self.run/'manifest.json', manifest)
+        commands = []
+        def launch(command, **kwargs):
+            commands.append(command)
+            return SimpleNamespace(stdout=str(100+len(commands))+'\n')
+        with patch('skill_forgetting.experiments.slurm.subprocess.run', side_effect=launch):
+            ids = submit(self.root/'config.json', self.root, self.run, dependency_job='99')
+        self.assertIn('--dependency=afterok:99', commands[0])
+        self.assertIn('--dependency=afterok:101', commands[1])
+        self.assertIn('--dependency=afterok:102', commands[2])
+        self.assertEqual(ids, {'baseline':'101', 'branches':'102', 'report':'103'})
 
 
 if __name__ == '__main__':
