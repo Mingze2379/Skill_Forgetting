@@ -68,7 +68,7 @@ PY=/data/user/msun411/cl-artifacts/envs/sft/bin/python
   --config configs/replay_shapley_pilot.json --dependency_job SMOKE_JOB_ID
 ```
 
-调度使用 `acd_u`：顺序基线一个 GPU，成功后启动八个单 GPU 分支，最多同时八张 GPU、64 核 CPU；最后一个 CPU 作业读取完成的分数表。依赖使用 `afterok`；失败的训练不会触发后续实验。作业 ID 保存在 `runs/replay_shapley_pilot/slurm/jobs.json`，日志也在此目录。
+调度使用 `acd_u`：顺序基线一个 GPU，成功后启动八个单 GPU 分支，最多同时八张 GPU、64 核 CPU；最后一个短作业读取完成的分数表。汇总计算使用 CPU，但 ACD 平台要求每个作业都指定 GPU，因此该短作业也申请一张 GPU，并在全部分支结束后运行。依赖使用 `afterok`；失败的训练不会触发后续实验。作业 ID 保存在 `runs/replay_shapley_pilot/slurm/jobs.json`，日志也在此目录。
 
 完成的训练和评估可以复用缓存；入口检查数据指纹、起点权重、参数、生成预算和评分器。未完成或参数不一致的目录会报错，避免把不同实验的输出拼成同一张表。
 

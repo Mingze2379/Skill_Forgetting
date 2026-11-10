@@ -31,7 +31,8 @@ def scripts(config: dict, config_path: Path, repo: Path, run_root: Path) -> dict
              f'#SBATCH --array=0-7%{config["branch_concurrency"]}',
              f'#SBATCH --output={logs}/branch-%A_%a.log']) + '\n' + env + \
              shlex.join(command + ['branch', '--subset_index']) + ' "$SLURM_ARRAY_TASK_ID"\n'
-    report = '\n'.join(common + ['#SBATCH --cpus-per-task=1', '#SBATCH --mem=2G',
+    # ACD rejects jobs without a GPU request, including this brief CPU-only calculation.
+    report = '\n'.join(common + ['#SBATCH --cpus-per-task=1', '#SBATCH --gres=gpu:1', '#SBATCH --mem=2G',
              '#SBATCH --time=00:10:00', '#SBATCH --job-name=cl-report',
              f'#SBATCH --output={logs}/report-%j.log']) + '\n' + env + shlex.join(
              [config['train_python'], '-m', 'skill_forgetting.experiments.report',

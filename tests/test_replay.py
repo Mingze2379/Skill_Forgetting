@@ -142,7 +142,7 @@ class ReplayTests(unittest.TestCase):
         self.assertIn('--partition=acd_u', rendered['branches'])
         self.assertIn('--gres=gpu:1', rendered['branches'])
         self.assertIn('--array=0-7%8', rendered['branches'])
-        self.assertNotIn('--gres', rendered['report'])
+        self.assertIn('--gres=gpu:1', rendered['report'])
         self.assertIn('HF_HUB_OFFLINE=1', rendered['baseline'])
 
     def test_smoke_success_gates_the_entire_job_chain(self):
