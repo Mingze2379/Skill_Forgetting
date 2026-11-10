@@ -5,6 +5,11 @@ Implementation of **Combating Catastrophic Forgetting in Continual Domain Adapta
 **Accepted at NeurIPS 2026.**
 
 Skill-augmented continual learning for math reasoning and agent tasks.
+
+The plain-SFT fixed-position replay/Shapley experiment is documented in
+[REPLAY_SHAPLEY.md](REPLAY_SHAPLEY.md). It preserves native MATH test data,
+uses training-held-out validation for valuation, and shares one starting model
+across eight independent LoRA branches.
 The implementation extracts reusable skills from training solutions, stores and
 updates them in a shared memory, retrieves relevant skills by embedding similarity,
 and adds them to prompts for sequential SFT or GRPO.

@@ -9,19 +9,11 @@ from typing import Any
 
 
 from skill_forgetting.memory.utils import build_example_id, compare_answers
+from skill_forgetting.math.plain import solver_prompt
 
 
 def build_prompt(row: dict[str, Any]) -> str:
-    problem = str(row.get("problem", "")).strip()
-    problem_type = str(row.get("type", "Unknown")).strip()
-    level = str(row.get("level", "Unknown")).strip()
-    # Match LlamaFactory SFT training format: instruction + newline + input
-    return (
-        "Solve the following competition math problem. Show concise reasoning and final answer.\n"
-        f"Type: {problem_type}\n"
-        f"Level: {level}\n\n"
-        f"Problem:\n{problem}"
-    )
+    return solver_prompt(row)
 
 
 def apply_chat_template(prompts: list[str], model_name: str) -> list[str]:
@@ -127,6 +119,8 @@ def main() -> None:
     from vllm import LLM, SamplingParams
 
     rows = load_rows(args.input_jsonl, args.limit)
+    if not rows:
+        raise ValueError("Evaluation input is empty.")
     if args.retrieval_log_jsonl is not None and args.skill_memory_dir is None:
         raise ValueError("--retrieval_log_jsonl requires --skill_memory_dir.")
 
@@ -177,16 +171,25 @@ def main() -> None:
     else:
         outputs = llm.generate(prompts, sampling_params=sampling_params)
 
+    if len(outputs) != len(rows):
+        raise RuntimeError("Inference returned fewer predictions than evaluation examples.")
+
     with args.output_jsonl.open("w", encoding="utf-8") as handle:
         for idx, (row, prompt, out) in enumerate(zip(rows, prompts, outputs)):
             text = out.outputs[0].text if out.outputs else ""
             record = {
+                "example_id": row.get("example_id") or build_example_id(
+                    str(row.get("problem", "")), str(row.get("type", "")), str(row.get("level", ""))),
+                "domain": row.get("domain"),
+                "split": row.get("split"),
                 "problem": row.get("problem", ""),
                 "type": row.get("type", ""),
                 "level": row.get("level", ""),
                 "gold_solution": row.get("solution", ""),
                 "prompt": prompt,
                 "prediction": text,
+                "generated_tokens": len(out.outputs[0].token_ids) if out.outputs else 0,
+                "finish_reason": out.outputs[0].finish_reason if out.outputs else None,
             }
             if retrieval_rows:
                 retrieval = retrieval_rows[idx]

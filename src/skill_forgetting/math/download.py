@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import io
+import urllib.request
 from pathlib import Path
 
 ROOT = Path("data")
+USE_PARQUET = False
 
 TYPE_NAME_MAP = {
     "Algebra": "algebra",
@@ -47,6 +50,8 @@ def parse_args() -> argparse.Namespace:
         default="competition_math",
     )
     parser.add_argument("--output_root", type=Path, default=Path("data"))
+    parser.add_argument("--parquet", action="store_true",
+                        help="Read HF's native-split Parquet exports (no dataset loading script).")
     return parser.parse_args()
 
 
@@ -96,7 +101,10 @@ def download_competition_math() -> None:
 
 
 def download_hendrycks_math() -> None:
-    from datasets import load_dataset
+    if not USE_PARQUET:
+        from datasets import load_dataset
+    else:
+        import pyarrow.parquet as pq
 
     out_root = ROOT / "hendrycks_math_splits"
     total_written = 0
@@ -104,7 +112,14 @@ def download_hendrycks_math() -> None:
     for subset_name, display_type in HENDRYCKS_SUBSETS.items():
         slug = TYPE_NAME_MAP[display_type]
         for split_name in ("train", "test"):
-            ds = load_dataset("EleutherAI/hendrycks_math", subset_name, split=split_name)
+            if USE_PARQUET:
+                url = ("https://huggingface.co/api/datasets/EleutherAI/hendrycks_math/parquet/"
+                       f"{subset_name}/{split_name}/0.parquet")
+                with urllib.request.urlopen(url, timeout=120) as response:
+                    payload = response.read()
+                ds = pq.read_table(io.BytesIO(payload)).to_pylist()
+            else:
+                ds = load_dataset("EleutherAI/hendrycks_math", subset_name, split=split_name)
             rows = [
                 {
                     "problem": row["problem"],
@@ -122,9 +137,10 @@ def download_hendrycks_math() -> None:
 
 
 def main() -> None:
-    global ROOT
+    global ROOT, USE_PARQUET
     args = parse_args()
     ROOT = args.output_root
+    USE_PARQUET = args.parquet
     if args.source == "competition_math":
         download_competition_math()
     elif args.source == "hendrycks_math":
