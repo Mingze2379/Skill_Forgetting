@@ -11,9 +11,14 @@ from skill_forgetting.memory.utils import compare_answers
 from .common import DOMAINS, file_digest, read_rows, write_json, write_rows
 
 
-def judge(prediction: str, gold: str) -> dict:
+def judge(prediction: str, gold: str, *, finish_reason: str | None = None) -> dict:
     from math_verify import parse, verify, LatexExtractionConfig, ExprExtractionConfig
     legacy = compare_answers(prediction, gold)
+    # A truncated reasoning line has no completed final answer. Parsing its prose
+    # can otherwise credit an incidental number from an unfinished derivation.
+    incomplete_terminal = (finish_reason == 'length' and
+                           legacy.prediction.source == 'terminal_line' and
+                           not legacy.is_correct)
     config = [LatexExtractionConfig(), ExprExtractionConfig()]
     # Compare extracted final answers, rather than incidental expressions in the reasoning.
     def parsed(answer):
@@ -24,7 +29,8 @@ def judge(prediction: str, gold: str) -> dict:
     equivalent = False
     try:
         parsed_gold = parsed(legacy.gold.extracted_answer)
-        parsed_prediction = parsed(legacy.prediction.extracted_answer)
+        if not incomplete_terminal:
+            parsed_prediction = parsed(legacy.prediction.extracted_answer)
         if parsed_gold and parsed_prediction:
             equivalent = bool(verify(parsed_gold, parsed_prediction, timeout_seconds=3))
     except Exception as exc:
@@ -33,6 +39,8 @@ def judge(prediction: str, gold: str) -> dict:
             'legacy_correct': legacy.is_correct, 'math_verify_correct': equivalent,
             'gold_answer': legacy.gold.extracted_answer,
             'predicted_answer': legacy.prediction.extracted_answer,
+            'prediction_answer_source': legacy.prediction.source,
+            'incomplete_terminal_answer': incomplete_terminal,
             'gold_parsed': bool(parsed_gold), 'prediction_parsed': bool(parsed_prediction),
             'math_verify_error': error}
 
@@ -54,7 +62,7 @@ def score(predictions: Path, validation: Path, output: Path, metadata: dict | No
         gold = expected_by_id[row['example_id']]
         if row.get('domain') != gold['domain'] or row.get('gold_solution') != gold['solution']:
             raise ValueError('Prediction domain or gold solution differs from validation manifest')
-        result = judge(row['prediction'], gold['solution'])
+        result = judge(row['prediction'], gold['solution'], finish_reason=row.get('finish_reason'))
         result.update(example_id=row['example_id'], domain=gold['domain'],
                       problem=gold['problem'], gold_solution=gold['solution'], prediction=row['prediction'])
         judged.append(result)
@@ -75,6 +83,7 @@ def score(predictions: Path, validation: Path, output: Path, metadata: dict | No
                'validation_sha256': file_digest(validation), 'prediction_sha256': file_digest(predictions),
                'scorer': {'math_verify_version': version('math-verify'),
                           'primary': 'legacy exact match OR Math-Verify final-answer equivalence',
+                          'truncation_policy': 'No equivalence credit for unfinished terminal reasoning; explicit or exact final answers remain eligible',
                           'code_sha256': file_digest(Path(__file__))},
                'metadata': metadata or {}}
     output.mkdir(parents=True, exist_ok=True)

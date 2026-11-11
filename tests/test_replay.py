@@ -133,6 +133,26 @@ class ReplayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             score(prediction, self.run / 'splits/algebra/test_raw.jsonl', self.root / 'bad')
 
+    def test_truncated_reasoning_does_not_credit_incidental_numbers(self):
+        unfinished = r'The counts must be 2 and 3. The arrangement is $G\_\_\_'
+        verdict = judge(unfinished, r'\boxed{3}', finish_reason='length')
+        self.assertFalse(verdict['correct'])
+        self.assertTrue(verdict['incomplete_terminal_answer'])
+        # An explicit completed answer can survive later generation truncation.
+        self.assertTrue(judge(r'\boxed{1/2}', r'\boxed{0.5}', finish_reason='length')['correct'])
+        complete = ('Since there are 17 teams, there must be 16 games played in order to determine a winner. '
+                    'Each game eliminates one team, and we need to eliminate 16 teams in order to determine a winner.')
+        self.assertTrue(judge(complete, r'\boxed{16}', finish_reason='stop')['correct'])
+        validation = self.run / 'validation_raw.jsonl'
+        expected = read_rows(validation)
+        rows = [{'example_id': r['example_id'], 'domain': r['domain'], 'gold_solution': r['solution'],
+                 'prediction': r'We have counts of 2 and 1. The arrangement is $G\_\_',
+                 'finish_reason': 'length'} for r in expected]
+        predictions = self.root / 'unfinished.jsonl'
+        write_rows(predictions, rows)
+        result = score(predictions, validation, self.root / 'unfinished_score')
+        self.assertEqual(result['v'], 0)
+
     def test_report_refuses_missing_real_scores(self):
         with self.assertRaises(FileNotFoundError):
             collect(self.run)
