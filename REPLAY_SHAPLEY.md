@@ -2,6 +2,10 @@
 
 本实验直接使用普通 SFT，不执行技能记忆抽取与增强。训练仍由 LlamaFactory 完成；生成式评估复用上游 `math.evaluate`。默认配置见 `configs/replay_shapley_pilot.json`。
 
+本轮是训练后估值的探索实验：三个候选旧题包先固定，八个组合全部训练后再计算 Shapley。它尚未验证训练前筛选、包内题目选择或独立正式训练的收益。重写后的完整实验报告见 `runs/replay_shapley_pilot/report/experiment_explained_zh.md`，包含真实结果、参数来源及下一步独立筛选验证设计。
+
+2,048-token 重评已完成，另存于 `runs/replay_shapley_pilot/evaluation_length_2048`。新增入口 `experiments.reevaluate` 只调用已有权重推理，不改变冻结配置或调用训练。新旧排名不一致；A 在同为1,024上限的重复推理中也从39.5%变为35.75%，因此原排序尚未稳定复现。详情见该目录的 `report/sensitivity_explained_zh.md`，在稳定推理问题解决前不把排名变化单独归因于生成长度。
+
 ## 固定的实验定义
 
 - 模型：Qwen2.5-3B-Instruct，LoRA rank 16、alpha 32、dropout 0.05，学习率 `1e-4`。
